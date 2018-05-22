@@ -16,6 +16,11 @@ func init() {
 func main() {
 	f := parseFlags()
 
+	err := initCacheDir(f.cachePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	log.Fatalln(
 		http.ListenAndServe(f.addr, Server(
 			NewCache(f.cachePath, f.cacheTime),
@@ -53,4 +58,13 @@ func parseFlags() *flags {
 	}
 
 	return f
+}
+
+func initCacheDir(path string) error {
+	err := os.Mkdir(path, os.ModePerm)
+	if err != nil && !os.IsExist(err) {
+		return err
+	}
+
+	return nil
 }
