@@ -1,4 +1,4 @@
 package main
 
 // Version stores build version
-var Version = "unknown"
+var Version = "0.0.1"

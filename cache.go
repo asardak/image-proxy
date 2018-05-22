@@ -6,49 +6,49 @@ import (
 	"io"
 	"os"
 	"path"
-	"sync"
 	"time"
 )
 
 type Cache struct {
 	root    string
 	timeout time.Duration
-	mu      sync.RWMutex
 }
 
 func NewCache(path string, timeout time.Duration) *Cache {
 	return &Cache{root: path, timeout: timeout}
 }
 
-func (c *Cache) Get(url string) (*os.File, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	f, err := os.Open(c.buildPath(url))
+func (c *Cache) Get(url string) (f io.ReadCloser, age time.Duration, err error) {
+	file, err := os.Open(c.buildPath(url))
 	if os.IsNotExist(err) {
-		return nil, nil
+		return
 	}
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	info, err := f.Stat()
+	f = file
+	info, err := file.Stat()
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	if time.Since(info.ModTime()) > c.timeout {
-		return nil, f.Close()
+	age = time.Since(info.ModTime())
+	if age > c.timeout {
+		err = f.Close()
+		f = nil
+		return
 	}
 
-	return f, nil
+	return
 }
 
-func (c *Cache) newWriter(url string) (io.WriteCloser, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+func (c *Cache) NewWriter(url string) (io.WriteCloser, error) {
 	return os.Create(c.buildPath(url))
+}
+
+func (c *Cache) Timeout() time.Duration {
+	return c.timeout
 }
 
 func (c *Cache) buildPath(url string) string {

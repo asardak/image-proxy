@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 var (
@@ -13,38 +14,52 @@ var (
 	ErrBlankHeight = errors.New("height cannot be blank")
 )
 
-func (api *API) GetImage(w http.ResponseWriter, r *http.Request) {
-	url, width, height, err := parseRequest(r)
-	if err != nil {
-		writeErr(w, err)
-		return
+type cacheInterface interface {
+	Get(url string) (f io.ReadCloser, age time.Duration, err error)
+	NewWriter(url string) (io.WriteCloser, error)
+	Timeout() time.Duration
+}
+
+func GetImage(cache cacheInterface) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		url, width, height, err := parseRequest(r)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+
+		file, expire, err := cache.Get(r.RequestURI)
+
+		if file != nil {
+			defer file.Close()
+			writeCacheHeaders(w, expire)
+			io.Copy(w, file)
+			return
+		}
+
+		resp, err := http.Get(url)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		cacheWriter, err := cache.NewWriter(r.RequestURI)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		defer cacheWriter.Close()
+
+		multiWriter := io.MultiWriter(w, cacheWriter)
+
+		writeCacheHeaders(w, cache.Timeout())
+		err = Resize(resp.Body, width, height, multiWriter)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
 	}
-
-	_, _ = width, height
-
-	file, err := api.cache.Get(url)
-	defer file.Close()
-
-	if file != nil {
-		io.Copy(w, file)
-		return
-	}
-
-	resp, err := http.Get(url)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	wc, err := api.cache.newWriter(url)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	defer wc.Close()
-
-	io.Copy(io.MultiWriter(w, wc), resp.Body)
 }
 
 func parseRequest(r *http.Request) (url string, width int, height int, err error) {
@@ -80,4 +95,14 @@ func parseRequest(r *http.Request) (url string, width int, height int, err error
 func writeErr(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusInternalServerError)
 	w.Write([]byte("Error: " + err.Error()))
+}
+
+func writeCacheHeaders(w http.ResponseWriter, expireTimeout time.Duration) {
+	const (
+		CacheControlHeader = "Cache-Control"
+		ExpiresHeader      = "Expires"
+	)
+
+	w.Header().Add(CacheControlHeader, "public")
+	w.Header().Add(ExpiresHeader, time.Now().Add(expireTimeout).Format(time.RFC1123Z))
 }

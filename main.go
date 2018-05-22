@@ -16,11 +16,10 @@ func init() {
 func main() {
 	f := parseFlags()
 
-	cache := NewCache(f.cachePath, f.cacheTime)
-	api := NewAPI(cache)
-
 	log.Fatalln(
-		http.ListenAndServe(f.addr, api),
+		http.ListenAndServe(f.addr, Server(
+			NewCache(f.cachePath, f.cacheTime),
+		)),
 	)
 }
 
@@ -39,7 +38,7 @@ func parseFlags() *flags {
 	flag.BoolVar(&f.help, "h", false, "Help")
 	flag.StringVar(&f.addr, "addr", ":8080", "Listen address")
 	flag.StringVar(&f.cachePath, "cache-path", "/tmp/image-proxy", "Path to cache folder")
-	flag.DurationVar(&f.cacheTime, "cache-time", time.Minute, "Cache timeout")
+	flag.DurationVar(&f.cacheTime, "cache-time", time.Hour, "Cache timeout")
 	flag.Parse()
 
 	if f.version {
