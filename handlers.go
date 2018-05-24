@@ -29,6 +29,10 @@ func GetImage(cache cacheInterface) http.HandlerFunc {
 		}
 
 		file, expire, err := cache.Get(r.RequestURI)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
 
 		if file != nil {
 			defer file.Close()
