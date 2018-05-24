@@ -21,6 +21,7 @@ func NewCache(path string, timeout time.Duration) *Cache {
 func (c *Cache) Get(url string) (f io.ReadCloser, age time.Duration, err error) {
 	file, err := os.Open(c.buildPath(url))
 	if os.IsNotExist(err) {
+		err = nil
 		return
 	}
 	if err != nil {
